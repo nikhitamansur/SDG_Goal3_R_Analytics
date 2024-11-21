@@ -1,0 +1,174 @@
+---
+title: "fdaproject"
+author: "21MIA1094-1144"
+date: "2024-11-06"
+output: html_document
+---
+```{r}
+install.packages("rpart")
+```
+```{r}
+install.packages("Metrics")
+```
+
+
+```{r}
+library(caret)
+library(e1071)
+library(randomForest)
+```
+```{r}
+library(xgboost)
+```
+```{r}
+# Load the dataset
+data <- read.csv("C:/Users/serar/Downloads/healthcare_dataset.csv")
+colnames(data)
+```
+```{r}
+rownames(data)
+```
+DATA PROCESSING
+```{r}
+data$Admission.Type <- as.factor(data$Admission.Type)  
+
+```
+
+Encode categorical features
+```{r}
+data$Gender <- as.factor(data$Gender)
+data$Blood.Type <- as.factor(data$Blood.Type)
+data$Medical.Condition <- as.factor(data$Medical.Condition)
+data$Insurance.Provider <- as.factor(data$Insurance.Provider)
+data$Medication <- as.factor(data$Medication)
+data$Test.Results <- as.factor(data$Test.Results)
+```
+
+Dropping columns that are not relevant or too unique (e.g., Name, Doctor, Hospital, Date columns)
+```{r}
+data <- data[, !(names(data) %in% c("Name", "Doctor", "Hospital", "Date.of.Admission", "Discharge.Date", "Room.Number"))]
+
+
+```
+
+Splitting data into training and test sets
+```{r}
+
+set.seed(123)
+trainIndex <- createDataPartition(data$Admission.Type, p = 0.7, list = FALSE)
+trainData <- data[trainIndex, ]
+testData <- data[-trainIndex, ]
+
+```
+
+Random Forest Model
+```{r}
+
+rf_model <- randomForest(Admission.Type ~ ., data = trainData, ntree = 500)
+rf_pred <- predict(rf_model, testData)
+rf_accuracy <- mean(rf_pred == testData$Admission.Type)
+
+
+```
+
+Support Vector Machine Model
+```{r}
+
+svm_model <- svm(Admission.Type ~ ., data = trainData, kernel = "linear")
+svm_pred <- predict(svm_model, testData)
+svm_accuracy <- mean(svm_pred == testData$Admission.Type)
+
+```
+
+
+XGBoost Model
+```{r}
+
+train_matrix <- model.matrix(Admission.Type ~ . - 1, data = trainData)
+train_label <- as.numeric(trainData$Admission.Type) - 1  # XGBoost requires numeric labels starting from 0
+test_matrix <- model.matrix(Admission.Type ~ . - 1, data = testData)
+test_label <- as.numeric(testData$Admission.Type) - 1
+
+xgb_model <- xgboost(data = train_matrix, label = train_label, nrounds = 100, objective = "multi:softmax", num_class = length(levels(trainData$Admission.Type)))
+xgb_pred <- predict(xgb_model, test_matrix)
+xgb_accuracy <- mean(xgb_pred == test_label)
+
+```
+
+Comparison of Model Accuracies
+```{r}
+# Accuracies of models
+accuracies <- data.frame(
+  Model = c("Random Forest", "SVM", "XGBoost"),
+  Accuracy = c(rf_accuracy, svm_accuracy, xgb_accuracy)
+)
+
+# Bar plot for model accuracies
+library(ggplot2)
+
+ggplot(accuracies, aes(x = Model, y = Accuracy, fill = Model)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(title = "Model Accuracies", x = "Model", y = "Accuracy") +
+  scale_fill_brewer(palette = "Set2")
+```
+
+```{r}
+# Plot feature importance from Random Forest
+rf_importance <- importance(rf_model)  # Extract importance
+rf_importance_df <- data.frame(Feature = rownames(rf_importance), Importance = rf_importance[, 1])
+
+ggplot(rf_importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Random Forest Feature Importance", x = "Features", y = "Importance")
+
+```
+Feature Importance for XGBoost
+```{r}
+# Plot feature importance from XGBoost
+xgb_importance <- xgb.importance(model = xgb_model)  # Extract importance
+xgb_importance_df <- data.frame(Feature = xgb_importance$Feature, Importance = xgb_importance$Gain)
+
+ggplot(xgb_importance_df, aes(x = reorder(Feature, Importance), y = Importance)) +
+  geom_bar(stat = "identity", fill = "darkorange") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "XGBoost Feature Importance", x = "Features", y = "Importance")
+
+```
+Confusion Matrix Heatmap
+```{r}
+# Confusion matrix for Random Forest (can be replaced with other models)
+rf_conf_matrix <- table(Predicted = rf_pred, Actual = testData$Admission.Type)
+
+# Convert confusion matrix to a data frame
+conf_matrix_df <- as.data.frame(as.table(rf_conf_matrix))
+
+ggplot(conf_matrix_df, aes(x = Predicted, y = Actual, fill = Freq)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  theme_minimal() +
+  labs(title = "Confusion Matrix Heatmap (Random Forest)", x = "Predicted", y = "Actual")
+
+```
+
+
+Printing accuracies
+```{r}
+
+cat("Random Forest Accuracy:", rf_accuracy, "\n")
+cat("SVM Accuracy:", svm_accuracy, "\n")
+cat("XGBoost Accuracy:", xgb_accuracy, "\n")
+
+```
+
+Comparing and suggestting the best model
+```{r}
+
+accuracies <- c(RandomForest = rf_accuracy, SVM = svm_accuracy, XGBoost = xgb_accuracy)
+best_model <- names(accuracies)[which.max(accuracies)]
+cat("The best model fit for the given dataset is:", best_model, "with an accuracy of", max(accuracies), "\n")
+```
+
